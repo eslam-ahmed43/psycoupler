@@ -16,9 +16,23 @@ Quick start
     ]
 
     result = analyze_conversation(turns)
-    print(result.topology)       # Topology.ASYMMETRIC_REINFORCEMENT
-    print(result.risk_level)     # RiskLevel.HIGH
-    print(result.coupling_score) # 0.72
+    print(result.topology)
+    print(result.risk_level)
+    print(result.confidence)
+
+Manipulation detection
+----------------------
+    from psycoupler.manipulation import detect_manipulation
+
+    report = detect_manipulation(turns)
+    print(report.overall_risk)
+
+Multidimensional embeddings
+---------------------------
+    from psycoupler.embeddings import EmbeddingExtractor
+
+    extractor = EmbeddingExtractor()
+    result = analyze_conversation(turns, sentiment_fn=extractor.as_sentiment_fn())
 """
 
 from psycoupler.analyzer import analyze_conversation
@@ -38,6 +52,8 @@ from psycoupler.topology import (
     analyze_topology_over_time,
     classify_topology,
 )
+from psycoupler.manipulation import detect_manipulation, ManipulationReport, ManipulationSignal, ManipulationType
+from psycoupler.embeddings import EmbeddingExtractor
 
 __version__ = "0.2.0"
 
@@ -45,8 +61,13 @@ __all__ = [
     "analyze_conversation",
     "analyze_topology_over_time",
     "classify_topology",
+    "detect_manipulation",
     "AdaptiveLabel",
     "CouplingMetrics",
+    "EmbeddingExtractor",
+    "ManipulationReport",
+    "ManipulationSignal",
+    "ManipulationType",
     "RiskLevel",
     "Topology",
     "TopologyResult",

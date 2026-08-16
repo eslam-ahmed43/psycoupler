@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "psycoupler"
-version = "0.1.0"
+version = "0.2.0"
 description = "Measure psychological coupling dynamics in human-LLM conversations"
 readme = "README.md"
 license = { text = "MIT" }
@@ -20,14 +20,16 @@ classifiers = [
 dependencies = [
     "numpy>=1.24",
     "scipy>=1.11",
-    "transformers>=4.40",
-    "torch>=2.1",
 ]
 
 [project.optional-dependencies]
+embeddings = [
+    "sentence-transformers>=2.2",
+]
 dev = [
     "pytest>=8.0",
     "pytest-cov",
+    "sentence-transformers>=2.2",
 ]
 
 [tool.setuptools.packages.find]
