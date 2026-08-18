@@ -18,7 +18,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Sequence
+from typing import Any, Sequence, Union
 
 
 class ManipulationType(str, Enum):
@@ -137,7 +137,7 @@ def _scan_text(
 
 
 def detect_manipulation(
-    turns: Sequence[dict[str, Any]],
+    turns: Union[str, dict[str, Any], Sequence[dict[str, Any]]],
     *,
     user_role: str = "user",
     scan_model: bool = False,
@@ -152,7 +152,9 @@ def detect_manipulation(
     Parameters
     ----------
     turns:
-        List of dicts with ``role`` and ``content`` keys.
+        List of dicts with ``role`` and ``content`` keys. 
+        Can also be a single string (will be treated as a user turn).
+        Can also be a single dict.
     user_role:
         Role string identifying user turns.
     scan_model:
@@ -171,6 +173,12 @@ def detect_manipulation(
     >>> for signal in report.signals:
     ...     print(signal.manipulation_type, signal.matched_pattern)
     """
+    # Normalize input: convert single string or single dict to a list of dicts
+    if isinstance(turns, str):
+        turns = [{"role": "user", "content": turns}]
+    elif isinstance(turns, dict) and "content" in turns:
+        turns = [turns]
+    
     all_signals: list[ManipulationSignal] = []
 
     for i, turn in enumerate(turns):

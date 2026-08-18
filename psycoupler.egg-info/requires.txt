@@ -1,8 +1,10 @@
 numpy>=1.24
 scipy>=1.11
-transformers>=4.40
-torch>=2.1
 
 [dev]
 pytest>=8.0
 pytest-cov
+sentence-transformers>=2.2
+
+[embeddings]
+sentence-transformers>=2.2

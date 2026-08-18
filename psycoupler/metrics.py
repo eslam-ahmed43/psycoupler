@@ -64,18 +64,35 @@ def compute_cross_correlation(
     m = (m - m.mean()) / m.std()
 
     n = len(u)
+    if n < 2 or len(m) < 2:
+        return 0.0, 0
+
+    max_possible_lag = min(max_lag, n - 1, len(m) - 1)
     best_corr = -np.inf
     best_lag = 0
 
-    for lag in range(-max_lag, max_lag + 1):
+    for lag in range(-max_possible_lag, max_possible_lag + 1):
         if lag >= 0:
-            corr = float(np.corrcoef(u[lag:], m[:n - lag] if lag > 0 else m)[0, 1])
+            u_seg = u[:-lag] if lag > 0 else u
+            m_seg = m[lag:]
         else:
-            corr = float(np.corrcoef(u[:n + lag], m[-lag:])[0, 1])
+            u_seg = u[-lag:]
+            m_seg = m[:lag]
+
+        if len(u_seg) < 2 or len(m_seg) < 2:
+            continue
+
+        min_len = min(len(u_seg), len(m_seg))
+        u_seg = u_seg[:min_len]
+        m_seg = m_seg[:min_len]
+
+        corr = float(np.corrcoef(u_seg, m_seg)[0, 1])
         if not np.isnan(corr) and corr > best_corr:
             best_corr = corr
             best_lag = lag
 
+    if best_corr == -np.inf:
+        return 0.0, 0
     return float(best_corr), best_lag
 
 
@@ -99,7 +116,6 @@ def compute_asymmetry_index(
     if len(u) < 3:
         return 0.0
 
-    # Granger-lite: does m[t-1] predict u[t] better than u[t-1] alone?
     u_diff = np.diff(u)
     m_prev = m[:-1]
     u_prev = u[:-1]
@@ -107,9 +123,7 @@ def compute_asymmetry_index(
     if u_prev.std() == 0:
         return 0.0
 
-    # Variance explained by user's own past
     corr_self = float(np.corrcoef(u_prev, u_diff)[0, 1]) ** 2 if u_prev.std() > 0 else 0.0
-    # Variance explained by model's past
     corr_cross = float(np.corrcoef(m_prev, u_diff)[0, 1]) ** 2 if m_prev.std() > 0 else 0.0
 
     total = corr_self + corr_cross
@@ -156,7 +170,7 @@ def compute_synchrony_score(
         return 0.0
 
     corr = float(np.corrcoef(u, m)[0, 1])
-    return float((corr + 1) / 2)  # map [-1, 1] -> [0, 1]
+    return float((corr + 1) / 2)
 
 
 def compute_coupling_metrics(
