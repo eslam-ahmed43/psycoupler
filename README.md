@@ -191,7 +191,7 @@ for w in timeline:
 python examples/visualize_trajectories.py
 ```
 
-![Coupling Trajectories](examples/coupling_trajectories.png)
+![Coupling Trajectories](https://raw.githubusercontent.com/eslam-ahmed43/psycoupler/main/examples/coupling_trajectories.png)
 
 ---
 
@@ -280,7 +280,7 @@ embedding    = extractor.embed(text)  # raw vector for custom metrics
 | Version | Focus |
 |---|---|
 | `v0.1` | Core metrics, three topologies, confidence, real model validation |
-| v0.2.1 | *(current)* | Multidimensional embeddings, manipulation detection, 31/31 tests, stress-test proven |
+| **v0.2.1** *(current)* | Multidimensional embeddings, manipulation detection, 31/31 tests, stress-test proven |
 | `v0.3` | Granger causality, turn-level attribution, async support |
 | `v1.0` | Benchmark suite, REST API, validation dataset, research paper |
 
@@ -304,9 +304,15 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, test requirements, and submiss
   year    = {2026},
   url     = {https://arxiv.org/abs/2506.03358}
 }
-```
 
----
+@software{psycoupler2026,
+  title   = {PsyCoupler: Open-source toolkit for psychological coupling analysis},
+  author  = {Ahmed, Eslam},
+  year    = {2026},
+  url     = {https://github.com/eslam-ahmed43/psycoupler},
+  version = {0.2.1}
+}
+```
 
 ## License
 
