@@ -4,18 +4,24 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "psycoupler"
-version = "0.2.1"
+version = "0.2.2"
 description = "Measure psychological coupling dynamics in human-LLM conversations"
 readme = "README.md"
-license = { text = "MIT" }
+authors = [
+    {name = "Eslam Ahmed", email = "eslam66ahmad@gmail.com"}
+]
+license = {text = "MIT"}
 requires-python = ">=3.10"
-keywords = ["llm", "ai-safety", "psychology", "conversation-analysis", "human-ai"]
+keywords = ["llm", "ai-safety", "psychology", "conversation-analysis", "human-ai", "coupling"]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Science/Research",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
 ]
 dependencies = [
     "numpy>=1.24",
@@ -30,7 +36,14 @@ dev = [
     "pytest>=8.0",
     "pytest-cov",
     "sentence-transformers>=2.2",
+    "build>=1.0",
+    "twine>=4.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/eslam-ahmed43/psycoupler"
+Repository = "https://github.com/eslam-ahmed43/psycoupler"
+BugTracker = "https://github.com/eslam-ahmed43/psycoupler/issues"
 
 [tool.setuptools.packages.find]
 where = ["."]
