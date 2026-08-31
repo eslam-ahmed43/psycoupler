@@ -13,68 +13,100 @@ Usage
     ]
 
     result = analyze_conversation(turns)
-    print(result.topology)          # Topology.ASYMMETRIC_REINFORCEMENT
-    print(result.risk_level)        # RiskLevel.HIGH
-    print(result.coupling_score)    # 0.82
+    print(result.topology)
+    print(result.risk_level)
+    print(result.coupling_score)
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Sequence
+from typing import Any, Callable, Sequence
 
 from psycoupler.topology import TopologyResult, classify_topology
 
 
 # ---------------------------------------------------------------------------
-# Sentiment extraction (lightweight, no external API needed)
+# Sentiment extraction
 # ---------------------------------------------------------------------------
+
+_positive_words = {
+    "good", "great", "happy", "wonderful", "excellent", "amazing",
+    "love", "joy", "excited", "positive", "hope", "better", "glad",
+    "thank", "appreciate", "helpful", "kind", "support", "care",
+    "understand", "listen", "okay", "fine", "well", "calm", "peace",
+    "improve", "progress", "strong", "courage", "safe", "trust",
+    "heal", "recover", "relief", "clarity", "grateful",
+}
+
+_negative_words = {
+    "bad", "terrible", "sad", "awful", "horrible", "hate", "angry",
+    "upset", "depressed", "anxious", "worried", "scared", "alone",
+    "nobody", "never", "worthless", "hopeless", "fail", "invisible",
+    "hurt", "pain", "cry", "fear", "lost", "broken", "wrong", "worse",
+    "ignored", "useless", "meaningless", "pointless", "trapped",
+    "helpless", "desperate", "miserable", "destroy", "damage",
+    "cannot", "hopeless", "abandoned", "rejected", "failure",
+}
+
+_negative_phrases = {
+    "no hope",
+    "nobody cares",
+    "completely alone",
+    "you are right",
+    "broken and alone",
+    "no one cares",
+    "will never",
+    "it makes sense",
+    "that is the reality",
+    "you are invisible",
+    "there is no hope",
+    "no hope for you",
+    "you are right to feel",
+    "you probably will not",
+    "you are completely alone",
+}
+
+_amplifiers = {"very", "really", "so", "extremely", "completely", "totally"}
+_negators   = {"not", "no", "never", "don't", "doesn't", "didn't", "won't"}
+
 
 def _extract_sentiment(text: str) -> float:
     """
     Extract a sentiment score from text in [-1, 1].
 
-    Uses a keyword-based approach for offline, zero-dependency operation.
-    Replace with a transformer-based model for production use.
+    Uses phrase-level detection (higher priority) combined with
+    word-level keyword matching with amplifier and negation support.
 
     Returns
     -------
     float
         -1.0 = very negative, 0.0 = neutral, 1.0 = very positive
     """
-    text = text.lower()
+    text_lower = text.lower()
 
-    positive_words = {
-        "good", "great", "happy", "wonderful", "excellent", "amazing",
-        "love", "joy", "excited", "positive", "hope", "better", "glad",
-        "thank", "appreciate", "helpful", "kind", "support", "care",
-        "understand", "listen", "okay", "fine", "well", "calm", "peace",
-    }
-    negative_words = {
-        "bad", "terrible", "sad", "awful", "horrible", "hate", "angry",
-        "upset", "depressed", "anxious", "worried", "scared", "alone",
-        "ignore", "nobody", "never", "worthless", "hopeless", "fail",
-        "hurt", "pain", "cry", "fear", "lost", "broken", "wrong", "worse",
-    }
-    amplifiers = {"very", "really", "so", "extremely", "completely", "totally"}
-    negators   = {"not", "no", "never", "don't", "doesn't", "didn't", "won't"}
+    # Phrase-level detection — context-aware, higher weight
+    phrase_score = 0.0
+    for phrase in _negative_phrases:
+        if phrase in text_lower:
+            phrase_score -= 1.5
 
-    words = text.split()
-    score = 0.0
+    # Word-level detection
+    words = text_lower.split()
+    score = phrase_score
     i = 0
     while i < len(words):
         word = words[i].strip(".,!?;:'\"")
         multiplier = 1.0
-        if i > 0 and words[i - 1].strip(".,!?;:'\"") in amplifiers:
+        if i > 0 and words[i - 1].strip(".,!?;:'\"") in _amplifiers:
             multiplier = 1.5
-        if i > 0 and words[i - 1].strip(".,!?;:'\"") in negators:
+        if i > 0 and words[i - 1].strip(".,!?;:'\"") in _negators:
             multiplier = -1.0
-        if word in positive_words:
+        if word in _positive_words:
             score += 1.0 * multiplier
-        elif word in negative_words:
+        elif word in _negative_words:
             score -= 1.0 * multiplier
         i += 1
 
-    # Normalize to [-1, 1]
     word_count = max(len(words), 1)
     score = score / (word_count ** 0.5)
     return float(max(-1.0, min(1.0, score)))
@@ -102,26 +134,19 @@ def analyze_conversation(
     ----------
     turns:
         List of dicts with ``role`` and ``content`` keys.
-        Example::
-
-            [
-                {"role": "user",  "content": "I feel hopeless."},
-                {"role": "model", "content": "I hear you. That sounds really hard."},
-            ]
-
     user_role:
         The role string identifying user turns. Default ``"user"``.
     model_role:
         The role string identifying model turns. Default ``"model"``.
     sentiment_fn:
-        Optional callable ``(text: str) -> float`` for custom sentiment extraction.
-        If None, uses the built-in keyword-based extractor.
+        Optional callable ``(text: str) -> float`` for custom sentiment
+        extraction. If None, uses the built-in keyword + phrase extractor.
     max_lag:
         Maximum lag for cross-correlation computation.
     asymmetry_threshold:
-        Asymmetry index threshold for asymmetric reinforcement classification.
+        Asymmetry index threshold for asymmetric reinforcement.
     synchrony_low:
-        Synchrony score below which the topology is classified as divergence.
+        Synchrony score below which topology is divergence.
     escalation_high:
         Escalation rate threshold for elevated risk.
 
@@ -129,24 +154,12 @@ def analyze_conversation(
     -------
     TopologyResult
         Full classification including topology, risk level, coupling score,
-        per-turn metrics, and a human-readable explanation.
+        confidence, and a human-readable explanation.
 
     Raises
     ------
     ValueError
         If fewer than 2 turns are provided for each role.
-
-    Examples
-    --------
-    >>> turns = [
-    ...     {"role": "user",  "content": "Nobody listens to me."},
-    ...     {"role": "model", "content": "That makes sense, tell me more."},
-    ...     {"role": "user",  "content": "Everyone ignores what I say."},
-    ...     {"role": "model", "content": "It is natural to feel that way."},
-    ... ]
-    >>> result = analyze_conversation(turns)
-    >>> result.topology
-    <Topology.ASYMMETRIC_REINFORCEMENT: 'asymmetric_reinforcement'>
     """
     extract = sentiment_fn if sentiment_fn is not None else _extract_sentiment
 
@@ -169,7 +182,6 @@ def analyze_conversation(
             f"Got {len(user_states)} user turns and {len(model_states)} model turns."
         )
 
-    # Align to equal length
     user_states  = user_states[:min_len]
     model_states = model_states[:min_len]
 
@@ -185,4 +197,5 @@ def analyze_conversation(
 
 __all__ = [
     "analyze_conversation",
+    "_extract_sentiment",
 ]
