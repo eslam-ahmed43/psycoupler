@@ -80,7 +80,7 @@ from psycoupler.filter import filter_dataset
 from psycoupler.training import CouplingRegularizer
 from psycoupler.rlhf import CouplingRewardWrapper
 
-__version__ = "0.2.2"
+__version__ = "0.2.3"
 
 __all__ = [
     "analyze_conversation",
