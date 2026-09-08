@@ -259,13 +259,18 @@ def classify_topology(
     # Risk level — slope-aware
     # ------------------------------------------------------------------
     if topology == Topology.SYMMETRIC_CONVERGENCE:
-        if user_slope > 0:
+        # Use epsilon to handle floating-point near-zero slopes
+        _eps = 1e-10
+        if user_slope > _eps:
             risk_level = RiskLevel.LOW
+        elif coupling_score >= 0.65 and user_slope <= _eps:
+            risk_level = RiskLevel.HIGH
         elif user_slope > -escalation_high:
             risk_level = RiskLevel.MODERATE
         else:
             risk_level = RiskLevel.HIGH
-
+    
+    
     elif topology == Topology.ASYMMETRIC_REINFORCEMENT:
         if user_slope < -escalation_high and coupling_score >= _COUPLING_SCORE_HIGH:
             risk_level = RiskLevel.CRITICAL
