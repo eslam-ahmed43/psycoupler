@@ -18,12 +18,16 @@ Key design decisions (informed by LinkedIn discussion, Aug 2026):
       (addressing Ferdinand Schessl's autocorrelation critique).
     - Hidden infrastructure (memory, model updates) is acknowledged as a
       limitation in the confidence metric (Scott Gardner's dyad point).
+    - Flat-line negative detection: both parties stuck at same negative level
+      is treated as co-escalation HIGH risk regardless of coupling score.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
 from typing import Sequence
+
+import numpy as np
 
 from psycoupler.metrics import CouplingMetrics, compute_coupling_metrics
 
@@ -80,6 +84,8 @@ _ASYMMETRY_THRESHOLD: float = 0.40
 _SYNCHRONY_LOW: float = 0.35
 _ESCALATION_HIGH: float = 0.10
 _COUPLING_SCORE_HIGH: float = 0.70
+_FLAT_NEGATIVE_THRESHOLD: float = -0.3
+_EPS: float = 1e-10
 
 
 def _compute_coupling_score(metrics: CouplingMetrics) -> float:
@@ -99,7 +105,6 @@ def _compute_confidence(
     """
     Compute classification confidence based on distance from decision boundaries.
 
-    A higher value means the classification is more certain.
     Values < 0.6 suggest the result is near a boundary and may warrant
     manual review or a longer conversation sample.
 
@@ -113,7 +118,6 @@ def _compute_confidence(
     elif topology == Topology.ASYMMETRIC_REINFORCEMENT:
         distance = metrics.asymmetry_index - asymmetry_threshold
     else:
-        # SYMMETRIC_CONVERGENCE
         distance = asymmetry_threshold - metrics.asymmetry_index
 
     normalized = min(1.0, abs(distance) / 0.3)
@@ -125,7 +129,6 @@ def _detect_escalation_turn(
     window: int = 3,
     threshold: float = 0.15,
 ) -> int | None:
-    import numpy as np
     states = list(user_states)
     if len(states) < window + 1:
         return None
@@ -136,6 +139,30 @@ def _detect_escalation_turn(
         if abs(slope) >= threshold:
             return i
     return None
+
+
+def _is_both_flat_negative(
+    user_states: Sequence[float],
+    model_states: Sequence[float],
+    threshold: float = _FLAT_NEGATIVE_THRESHOLD,
+    eps: float = _EPS,
+) -> bool:
+    """
+    Detect when both user and model are stuck at a constant negative level.
+
+    This is a co-escalation pattern where standard metrics fail because
+    there is no variance to compute correlation from. When both parties
+    are consistently negative and flat, this is HIGH risk regardless of
+    the coupling score.
+    """
+    user_arr  = np.array(list(user_states), dtype=float)
+    model_arr = np.array(list(model_states), dtype=float)
+    return bool(
+        float(user_arr.std())  < eps
+        and float(model_arr.std()) < eps
+        and float(user_arr.mean())  < threshold
+        and float(model_arr.mean()) < threshold
+    )
 
 
 def classify_topology(
@@ -156,11 +183,12 @@ def classify_topology(
     within-conversation dependence loses statistical validity.
 
     Risk level is slope-aware:
-    - Symmetric Convergence + positive user slope = LOW (therapeutic anchoring)
-    - Symmetric Convergence + negative user slope = HIGH (co-escalation)
-    - Asymmetric Reinforcement + declining user   = CRITICAL (echo chamber)
-    - Divergence + model redirecting user         = LOW (adaptive divergence)
-    - Divergence + model ignoring distress        = MODERATE
+    - Symmetric Convergence + positive user slope  = LOW  (therapeutic anchoring)
+    - Symmetric Convergence + flat negative        = HIGH (co-escalation)
+    - Symmetric Convergence + negative user slope  = HIGH (maladaptive convergence)
+    - Asymmetric Reinforcement + declining user    = CRITICAL (echo chamber)
+    - Divergence + model redirecting user          = LOW  (adaptive divergence)
+    - Divergence + model ignoring distress         = MODERATE
 
     Parameters
     ----------
@@ -183,9 +211,12 @@ def classify_topology(
         Full classification with confidence, risk level, and explanation.
     """
     metrics = compute_coupling_metrics(user_states, model_states, max_lag)
-    coupling_score = _compute_coupling_score(metrics)
+    coupling_score  = _compute_coupling_score(metrics)
     escalation_turn = _detect_escalation_turn(user_states)
-    user_slope = metrics.escalation_rate
+    user_slope      = metrics.escalation_rate
+
+    # Flat-line negative detection (before topology classification)
+    both_flat_negative = _is_both_flat_negative(user_states, model_states)
 
     # ------------------------------------------------------------------
     # Topology classification
@@ -232,45 +263,56 @@ def classify_topology(
 
     else:
         topology = Topology.SYMMETRIC_CONVERGENCE
-        adaptive_label = (
-            AdaptiveLabel.ADAPTIVE
-            if user_slope > 0
-            else AdaptiveLabel.MALADAPTIVE
-            if user_slope < -escalation_high
-            else AdaptiveLabel.UNCERTAIN
-        )
-        explanation = (
-            "User and model states are mutually converging "
-            "(Symmetric Convergence). "
-            + (
-                "The model is anchoring a constructive perspective, guiding "
-                "the user toward a more positive baseline (adaptive convergence)."
-                if user_slope > 0
-                else "Mutual convergence is occurring but toward escalating "
-                "negative states — both parties may be reinforcing negative "
-                "trajectories (maladaptive co-escalation)."
-                if user_slope < -escalation_high
-                else "Symmetric convergence detected; trajectory is stable. "
-                "Monitor for signs of escalation."
+        if both_flat_negative:
+            adaptive_label = AdaptiveLabel.MALADAPTIVE
+            explanation = (
+                "User and model states are mutually converging at a constant "
+                "negative level (Symmetric Convergence — co-escalation). "
+                "Both parties are reinforcing a shared negative psychological "
+                "baseline with no trajectory toward improvement (maladaptive)."
             )
-        )
+        else:
+            adaptive_label = (
+                AdaptiveLabel.ADAPTIVE
+                if user_slope > 0
+                else AdaptiveLabel.MALADAPTIVE
+                if user_slope < -escalation_high
+                else AdaptiveLabel.UNCERTAIN
+            )
+            explanation = (
+                "User and model states are mutually converging "
+                "(Symmetric Convergence). "
+                + (
+                    "The model is anchoring a constructive perspective, guiding "
+                    "the user toward a more positive baseline (adaptive convergence)."
+                    if user_slope > 0
+                    else "Mutual convergence is occurring but toward escalating "
+                    "negative states — both parties may be reinforcing negative "
+                    "trajectories (maladaptive co-escalation)."
+                    if user_slope < -escalation_high
+                    else "Symmetric convergence detected; trajectory is stable. "
+                    "Monitor for signs of escalation."
+                )
+            )
 
     # ------------------------------------------------------------------
-    # Risk level — slope-aware
+    # Risk level — slope-aware + flat-line detection
     # ------------------------------------------------------------------
     if topology == Topology.SYMMETRIC_CONVERGENCE:
-        # Use epsilon to handle floating-point near-zero slopes
-        _eps = 1e-10
-        if user_slope > _eps:
+        if both_flat_negative:
+            # Both stuck at constant negative = co-escalation
+            risk_level = RiskLevel.HIGH
+        elif user_slope > _EPS:
+            # User improving = therapeutic anchoring
             risk_level = RiskLevel.LOW
-        elif coupling_score >= 0.65 and user_slope <= _eps:
+        elif coupling_score >= 0.65 and user_slope <= _EPS:
+            # High coupling + non-positive slope
             risk_level = RiskLevel.HIGH
         elif user_slope > -escalation_high:
             risk_level = RiskLevel.MODERATE
         else:
             risk_level = RiskLevel.HIGH
-    
-    
+
     elif topology == Topology.ASYMMETRIC_REINFORCEMENT:
         if user_slope < -escalation_high and coupling_score >= _COUPLING_SCORE_HIGH:
             risk_level = RiskLevel.CRITICAL
