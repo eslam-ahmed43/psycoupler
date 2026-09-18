@@ -104,7 +104,7 @@ def _compute_confidence(
 ) -> float:
     """
     Compute classification confidence based on distance from decision boundaries.
-
+    
     Values < 0.6 suggest the result is near a boundary and may warrant
     manual review or a longer conversation sample.
 
@@ -128,7 +128,7 @@ def _detect_escalation_turn(
     user_states: Sequence[float],
     window: int = 3,
     threshold: float = 0.15,
-) -> int | None:
+    ) -> int | None:
     states = list(user_states)
     if len(states) < window + 1:
         return None
